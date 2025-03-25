@@ -20,10 +20,9 @@ while true; do
     if [ $? -eq 0 ]; then
         echo "=== High CPU Usage Detected: $(date +'%Y-%m-%d %H:%M:%S') ===" >> $LOG_FILE
         
-        # 修复1：仅提取Average行数据
+        # 记录CPU核心状态
         echo "CPU Cores Usage:" >> $LOG_FILE
         mpstat -P ALL 1 1 | awk '
-            # 匹配Average行（核心数据）
             $0 ~ /^Average:/ && $2 ~ /all|[0-9]+/ {
                 core = $2
                 usage = 100 - $NF
@@ -31,7 +30,14 @@ while true; do
             }
         ' >> $LOG_FILE
 
-        # 修复2：移除column命令依赖，改用awk对齐
+        # 新增内存占用记录（仅总体）
+        echo -n "Memory Usage: " >> $LOG_FILE
+        free -m | awk '/^Mem:/{
+            # 计算内存使用百分比（已用/总量）
+            printf "%.1f%%\n", ($3/$2)*100
+        }' >> $LOG_FILE
+
+        # 记录进程列表
         echo -e "\nTop Processes:" >> $LOG_FILE
         ps -eo pid,ppid,user,%cpu,%mem,cmd --sort=-%cpu | head -n 11 | awk '
             BEGIN {printf "%-6s %-6s %-8s %-6s %-6s %s\n", "PID", "PPID", "USER", "%CPU", "%MEM", "CMD"}
