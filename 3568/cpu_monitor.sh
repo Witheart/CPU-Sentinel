@@ -13,7 +13,7 @@ check_dependencies() {
 
     if [ ${#missing[@]} -gt 0 ]; then
         echo "错误：缺少以下必需命令 - ${missing[*]}"
-        [[" ${missing[*]} " =~ "mpstat" ]] && echo "请安装 sysstat 包：sudo apt-get install sysstat"
+        [[ " ${missing[*]} " =~ "mpstat" ]] && echo "请安装 sysstat 包：sudo apt-get install sysstat"
         exit 1
     fi
 }
@@ -82,9 +82,10 @@ check_dependencies
 # 主监控循环
 while true; do
     cpu_trigger=0
-    cpu_data=$(mpstat -P ALL $CHECK_INTERVAL 1 | awk -v threshold=$THRESHOLD '
+    cpu_data=$(LC_ALL=C mpstat -P ALL $CHECK_INTERVAL 1 | awk -v threshold=$THRESHOLD '
         BEGIN {trigger = 0}
-        $3 ~ /[0-9]/ && $2 != "all" {
+        # 匹配数据行：第二列为CPU编号（all或数字），最后一列为数值
+        $2 ~ /^all$|^[0-9]+$/ && $NF ~ /^[0-9.]+$/ {
             usage = 100 - $NF
             if (usage > threshold) {
                 print $2, usage
@@ -97,23 +98,25 @@ while true; do
     if [ $? -eq 0 ]; then
         echo "[$(date +'%Y-%m-%d %H:%M:%S')] 警报：CPU超过阈值 ${THRESHOLD}%" | tee -a "$LOG_FILE"
         
-        # 记录系统状态
+        # 记录系统状态（统一使用英语环境）
         {
             echo "---- CPU 核心负载 ----"
-            mpstat -P ALL 1 1 | awk '
-                $0 ~ /^Average:/ && $2 ~ /all|[0-9]+/ {
+            LC_ALL=C mpstat -P ALL 1 1 | awk '
+                # 匹配包含CPU数据的行（all或数字编号）
+                $2 ~ /^all$|^[0-9]+$/ && $NF ~ /^[0-9.]+$/ {
                     printf "Core %-4s %.1f%%\n", $2, 100-$NF
                 }'
             
             echo -e "\n---- 内存使用情况 ----"
-            free -m | awk '
-                /^Mem/ {
+            LC_ALL=C free -m | awk '
+                # 匹配内存行：第一个字段为"Mem"
+                $1 == "Mem" {
                     printf "总内存: %dMB\n已使用: %dMB\n使用率: %.1f%%\n", 
                         $2, $3, ($3/$2)*100
                 }'
             
             echo -e "\n---- 进程资源 Top10 ----"
-            ps -eo pid,ppid,user,%cpu,%mem,cmd --sort=-%cpu | head -n 11 | awk '
+            LC_ALL=C ps -eo pid,ppid,user,%cpu,%mem,cmd --sort=-%cpu | head -n 11 | awk '
                 BEGIN {printf "%-6s %-6s %-8s %-6s %-6s %s\n", 
                     "PID", "PPID", "USER", "CPU%", "MEM%", "CMD"}
                 NR>1 {printf "%-6s %-6s %-8s %6.1f %6.1f %s\n", 
