@@ -102,15 +102,15 @@ while true; do
         {
             echo "---- CPU 核心负载 ----"
             LC_ALL=C mpstat -P ALL 1 1 | awk '
-                # 匹配包含CPU数据的行（all或数字编号）
-                $2 ~ /^all$|^[0-9]+$/ && $NF ~ /^[0-9.]+$/ {
+                # 仅匹配平均数据行（包含CPU编号）
+                $0 ~ /^Average/ && $2 ~ /^all$|^[0-9]+$/ {
                     printf "Core %-4s %.1f%%\n", $2, 100-$NF
                 }'
             
             echo -e "\n---- 内存使用情况 ----"
             LC_ALL=C free -m | awk '
-                # 匹配内存行：第一个字段为"Mem"
-                $1 == "Mem" {
+                # 精确匹配Mem行（包含冒号）
+                $1 == "Mem:" {
                     printf "总内存: %dMB\n已使用: %dMB\n使用率: %.1f%%\n", 
                         $2, $3, ($3/$2)*100
                 }'
